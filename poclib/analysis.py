@@ -4,13 +4,14 @@ Functions take tidy DataFrames (typically the exploded output of
 sql/pub_attributes.sql joined to the Congress roster) and produce share tables
 and publication-ready figures following the project plotting conventions.
 """
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
 from . import config
 
-PARTY_COLORS = {"Democrat": "#2E86AB", "Republican": "#BC4749", "Independent": "#6A994E"}
+PARTY_COLORS = {"Democrat": "blue", "Republican": "red", "Independent": "#6A994E"}
 ACCENT = "#2E86AB"
 
 
@@ -31,7 +32,9 @@ def all_grant_ids(attributes: pd.DataFrame) -> list[str]:
     return sorted(ids)
 
 
-def attach_org_names(attributes: pd.DataFrame, org_lookup: pd.DataFrame) -> pd.DataFrame:
+def attach_org_names(
+    attributes: pd.DataFrame, org_lookup: pd.DataFrame
+) -> pd.DataFrame:
     """Resolve funder/research GRID ids to names + funder types via a lookup table.
 
     Keeps the heavy publications scan to one pass by doing name resolution
@@ -41,7 +44,9 @@ def attach_org_names(attributes: pd.DataFrame, org_lookup: pd.DataFrame) -> pd.D
     id_to_types = dict(zip(org_lookup["id"], org_lookup["types"]))
 
     def names(ids) -> list[str]:
-        return [id_to_name[i] for i in (ids if ids is not None else []) if i in id_to_name]
+        return [
+            id_to_name[i] for i in (ids if ids is not None else []) if i in id_to_name
+        ]
 
     def types(ids) -> list[str]:
         out: set[str] = set()
@@ -56,7 +61,9 @@ def attach_org_names(attributes: pd.DataFrame, org_lookup: pd.DataFrame) -> pd.D
     return result
 
 
-def institutions_long(attributes: pd.DataFrame, org_lookup: pd.DataFrame) -> pd.DataFrame:
+def institutions_long(
+    attributes: pd.DataFrame, org_lookup: pd.DataFrame
+) -> pd.DataFrame:
     """One row per (publication x affiliated institution) with name, ROR, country.
 
     Built from the paper-level research_grids (author-affiliation GRID ids) and
@@ -64,7 +71,9 @@ def institutions_long(attributes: pd.DataFrame, org_lookup: pd.DataFrame) -> pd.
     institutional-prestige dataset.
     """
     cols = ["id", "name", "ror", "country_code"]
-    lookup = org_lookup[cols].rename(columns={"id": "grid_id", "name": "institution_name"})
+    lookup = org_lookup[cols].rename(
+        columns={"id": "grid_id", "name": "institution_name"}
+    )
     exploded = (
         attributes[["pub_id", "research_grids"]]
         .drop_duplicates("pub_id")
@@ -83,19 +92,31 @@ def load_prestige(filename: str = "ror_to_institution_prestige.csv") -> pd.DataF
     return pd.read_csv(config.INPUT_DIR / filename)
 
 
-def attach_prestige(institutions: pd.DataFrame, prestige: pd.DataFrame,
-                    left_on: str = "ror", right_on: str = "ror_id") -> pd.DataFrame:
+def attach_prestige(
+    institutions: pd.DataFrame,
+    prestige: pd.DataFrame,
+    left_on: str = "ror",
+    right_on: str = "ror_id",
+) -> pd.DataFrame:
     """Join an external ROR-keyed prestige table onto the institutions table.
 
     Defaults match input-data/ror_to_institution_prestige.csv (full-URL ROR in a
     `ror_id` column + `normalized_ordinal_prestige`). Unmatched rows keep NaN.
     """
-    return institutions.merge(prestige, left_on=left_on, right_on=right_on, how="left",
-                              suffixes=("", "_prestige"))
+    return institutions.merge(
+        prestige,
+        left_on=left_on,
+        right_on=right_on,
+        how="left",
+        suffixes=("", "_prestige"),
+    )
 
 
-def grants_long(attributes: pd.DataFrame, grants: pd.DataFrame,
-                org_lookup: pd.DataFrame | None = None) -> pd.DataFrame:
+def grants_long(
+    attributes: pd.DataFrame,
+    grants: pd.DataFrame,
+    org_lookup: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     """One row per (publication x supporting grant) with grant + funder details.
 
     Joins the publications' supporting_grant_ids to the grants lookup
@@ -122,7 +143,8 @@ def extract_domain(url: pd.Series) -> pd.Series:
         url.fillna("")
         .str.replace(r"^https?://", "", regex=True)
         .str.replace(r"^www\.", "", regex=True)
-        .str.split("/").str[0]
+        .str.split("/")
+        .str[0]
         .str.lower()
         .replace("", pd.NA)
     )
@@ -137,8 +159,9 @@ def load_media_bias(filename: str = "media_bias.csv") -> pd.DataFrame:
     return pd.read_csv(config.INPUT_DIR / filename)
 
 
-def attach_media_bias(news_policy: pd.DataFrame, bias: pd.DataFrame,
-                      on: str = "domain") -> pd.DataFrame:
+def attach_media_bias(
+    news_policy: pd.DataFrame, bias: pd.DataFrame, on: str = "domain"
+) -> pd.DataFrame:
     """Join a media-bias roster onto news/policy mentions by domain (or outlet).
 
     `news_policy` is the output of news_policy_mentions.sql with a `domain` column
@@ -175,8 +198,12 @@ def share_table(df: pd.DataFrame, column: str, top_n: int = 15) -> pd.DataFrame:
     return table.head(top_n)
 
 
-def plot_field_distribution(df: pd.DataFrame, field_column: str, top_n: int = 12,
-                            title: str = "Fields of amplified research") -> plt.Figure:
+def plot_field_distribution(
+    df: pd.DataFrame,
+    field_column: str,
+    top_n: int = 12,
+    title: str = "Fields of amplified research",
+) -> plt.Figure:
     """Horizontal bar chart of the most common research fields."""
     set_plot_style()
     table = share_table(df, field_column, top_n).iloc[::-1]
@@ -185,12 +212,12 @@ def plot_field_distribution(df: pd.DataFrame, field_column: str, top_n: int = 12
     ax.set_xlabel("Share of amplified publications")
     ax.set_title(title)
     sns.despine(left=True)
-    fig.tight_layout()
     return fig
 
 
-def partisan_field_split(df: pd.DataFrame, field_column: str, party_column: str = "party",
-                         top_n: int = 10) -> pd.DataFrame:
+def partisan_field_split(
+    df: pd.DataFrame, field_column: str, party_column: str = "party", top_n: int = 15
+) -> pd.DataFrame:
     """For each field, the share of amplifying mentions that are R vs D.
 
     Input grain: one row per (publication x amplifying member). Returns a
@@ -203,20 +230,33 @@ def partisan_field_split(df: pd.DataFrame, field_column: str, party_column: str 
     return counts.div(counts.sum(axis=1), axis=0)
 
 
-def plot_partisan_field_split(split: pd.DataFrame,
-                              title: str = "Partisan amplification by field") -> plt.Figure:
+def plot_partisan_field_split(
+    split: pd.DataFrame, title: str = "Partisan amplification by field"
+) -> plt.Figure:
     """Stacked horizontal bars of party shares per field."""
     set_plot_style()
     fig, ax = plt.subplots(figsize=(10, 0.55 * len(split) + 1.5))
     left = pd.Series(0.0, index=split.index)
     for party in split.columns:
         color = PARTY_COLORS.get(party, None)
-        ax.barh(split.index, split[party], left=left, label=party, color=color, alpha=0.85)
+        ax.barh(
+            split.index, split[party], left=left, label=party, color=color, alpha=0.7
+        )
         left += split[party]
     ax.set_xlabel("Share of amplifying mentions")
     ax.set_xlim(0, 1)
     ax.set_title(title)
-    ax.legend(loc="lower right", frameon=False, fontsize=11)
+    ax.legend(
+        loc="lower center",
+        frameon=False,
+        fontsize=16,
+        bbox_to_anchor=(0.5, -0.2),
+        ncols=2,
+    )
     sns.despine(left=True)
-    fig.tight_layout()
+    # fig.tight_layout()
+    # in-bar annotations for party
+    # ax.text(
+    #     split.index[-1], 0.5, "Democrat", color=PARTY_COLORS["Democrat"], fontsize=12
+    # )
     return fig
